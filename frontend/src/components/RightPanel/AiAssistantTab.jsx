@@ -107,7 +107,7 @@ export default function AiAssistantTab() {
   };
 
   return (
-    <div className="ai-tab" data-testid="ai-tab">
+    <div className="ai-tab" data-testid="ai-assistant-tab">
       {/* NL Generate */}
       <div className="ai-gen-section">
         <div className="ai-gen-label"><Sparkles size={12} /> Generate from description</div>

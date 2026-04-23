@@ -119,7 +119,7 @@ export default function TableNode({ id, data, selected }) {
             <Handle type="target" position={Position.Left} id={`target-${col.id}`} className="tn-handle" />
             <div
               className={`tn-col nodrag${editCol === col.id ? ' active' : ''}`}
-              onClick={(e) => { e.stopPropagation(); setEditCol(editCol === col.id ? null : col.id); }}
+              onClick={(e) => { e.stopPropagation(); setSelectedNode(id); setActiveTab('properties'); setEditCol(editCol === col.id ? null : col.id); }}
               data-testid={`col-${col.id}`}
             >
               <div className="tn-badges">

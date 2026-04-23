@@ -139,7 +139,7 @@ export default function PropertiesTab() {
   }
 
   return (
-    <div className="props-empty" data-testid="props-empty">
+    <div className="props-empty" data-testid="properties-empty-state">
       <p>Select a table or relationship to edit its properties.</p>
     </div>
   );
