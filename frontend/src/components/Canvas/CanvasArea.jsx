@@ -14,7 +14,7 @@ const edgeTypes = { relationshipEdge: RelationshipEdge };
 
 export default function CanvasArea() {
   const { nodes, edges, onNodesChange, onEdgesChange, onConnect, addTable } = useDiagramStore();
-  const { showMinimap, showGrid, clearSelection } = useUIStore();
+  const { showMinimap, showGrid, clearSelection, snapToGrid } = useUIStore();
   const wrapperRef = useRef(null);
   const rfInstance = useRef(null);
 
@@ -52,6 +52,8 @@ export default function CanvasArea() {
         minZoom={0.05}
         maxZoom={2.5}
         selectNodesOnDrag={false}
+        snapToGrid={snapToGrid}
+        snapGrid={[20, 20]}
       >
         <Background
           variant={showGrid ? BackgroundVariant.Dots : BackgroundVariant.Lines}

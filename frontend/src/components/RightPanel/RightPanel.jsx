@@ -3,11 +3,13 @@ import useUIStore from '../../store/uiStore';
 import SqlOutputTab from './SqlOutputTab';
 import AiAssistantTab from './AiAssistantTab';
 import PropertiesTab from './PropertiesTab';
-import { Code2, Bot, Settings } from 'lucide-react';
+import OrmOutputTab from './OrmOutputTab';
+import { Code2, Bot, Settings, Layers } from 'lucide-react';
 
 const TABS = [
-  { id: 'sql', label: 'SQL Output', icon: Code2 },
-  { id: 'ai', label: 'AI Assistant', icon: Bot },
+  { id: 'sql', label: 'SQL', icon: Code2 },
+  { id: 'orm', label: 'ORM', icon: Layers },
+  { id: 'ai', label: 'AI', icon: Bot },
   { id: 'properties', label: 'Properties', icon: Settings },
 ];
 
@@ -31,6 +33,7 @@ export default function RightPanel() {
       </div>
       <div className="right-panel-content">
         {activeTab === 'sql' && <SqlOutputTab />}
+        {activeTab === 'orm' && <OrmOutputTab />}
         {activeTab === 'ai' && <AiAssistantTab />}
         {activeTab === 'properties' && <PropertiesTab />}
       </div>

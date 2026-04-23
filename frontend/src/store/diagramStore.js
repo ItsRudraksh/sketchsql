@@ -155,6 +155,57 @@ const useDiagramStore = create((set, get) => ({
   canUndo: () => get().historyIndex > 0,
   canRedo: () => get().historyIndex < get().history.length - 1,
 
+  selectAll: () => {
+    set((s) => ({ nodes: s.nodes.map((n) => ({ ...n, selected: true })) }));
+  },
+
+  createJunctionTable: (edgeId) => {
+    const { nodes, edges } = get();
+    const edge = edges.find((e) => e.id === edgeId);
+    if (!edge) return null;
+    const srcNode = nodes.find((n) => n.id === edge.source);
+    const tgtNode = nodes.find((n) => n.id === edge.target);
+    if (!srcNode || !tgtNode) return null;
+    const srcPK = srcNode.data.columns.find((c) => c.primaryKey);
+    const tgtPK = tgtNode.data.columns.find((c) => c.primaryKey);
+    const juncId = `t_${uid()}`;
+    const srcColId = `c_${uid()}`;
+    const tgtColId = `c_${uid()}`;
+    const juncName = `${srcNode.data.name}_${tgtNode.data.name}`;
+    const juncNode = {
+      id: juncId,
+      type: 'tableNode',
+      position: {
+        x: (srcNode.position.x + tgtNode.position.x) / 2,
+        y: Math.max(srcNode.position.y, tgtNode.position.y) + 220,
+      },
+      data: {
+        id: juncId,
+        name: juncName,
+        color: 'gray',
+        columns: [
+          { id: srcColId, name: `${srcNode.data.name}_id`, type: (srcPK?.type || 'INT').split('(')[0], primaryKey: true, autoIncrement: false, nullable: false, unique: false, defaultValue: '' },
+          { id: tgtColId, name: `${tgtNode.data.name}_id`, type: (tgtPK?.type || 'INT').split('(')[0], primaryKey: true, autoIncrement: false, nullable: false, unique: false, defaultValue: '' },
+        ],
+      },
+    };
+    const mkEdge = (srcCId, tgtNodeId, tgtPkId) => ({
+      id: `r_${uid()}`,
+      type: 'relationshipEdge',
+      source: juncId,
+      sourceHandle: `source-${srcCId}`,
+      target: tgtNodeId,
+      targetHandle: tgtPkId ? `target-${tgtPkId}` : `target-${srcCId}`,
+      data: { id: `r_${uid()}`, type: 'one-to-many', onDelete: 'CASCADE', onUpdate: 'CASCADE', label: '' },
+    });
+    set((s) => ({
+      nodes: [...s.nodes, juncNode],
+      edges: [...s.edges.filter((e) => e.id !== edgeId), mkEdge(srcColId, srcNode.id, srcPK?.id), mkEdge(tgtColId, tgtNode.id, tgtPK?.id)],
+    }));
+    get().pushHistory();
+    return juncName;
+  },
+
   // Diagram ops
   getDiagramJSON: () => {
     const { nodes, edges, diagramId, diagramName, createdAt, dialect } = get();

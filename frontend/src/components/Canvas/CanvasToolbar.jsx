@@ -1,12 +1,12 @@
 import React from 'react';
 import useDiagramStore from '../../store/diagramStore';
 import useUIStore from '../../store/uiStore';
-import { Plus, Upload, Maximize2, Grid3X3, Map, Undo2, Redo2 } from 'lucide-react';
+import { Plus, Upload, Maximize2, Grid3X3, Map, Undo2, Redo2, Magnet } from 'lucide-react';
 import toast from 'react-hot-toast';
 
 export default function CanvasToolbar({ rfInstance }) {
-  const { addTable, undo, redo, canUndo, canRedo } = useDiagramStore();
-  const { showGrid, showMinimap, toggleGrid, toggleMinimap, openImportSqlModal } = useUIStore();
+  const { addTable, undo, redo, canUndo, canRedo, selectAll } = useDiagramStore();
+  const { showGrid, showMinimap, snapToGrid, toggleGrid, toggleMinimap, toggleSnapToGrid, openImportSqlModal } = useUIStore();
 
   const fitView = () => rfInstance.current?.fitView({ padding: 0.15, duration: 400 });
 
@@ -31,6 +31,9 @@ export default function CanvasToolbar({ rfInstance }) {
       <button className="tb-btn" onClick={fitView} data-testid="fit-view-btn" title="Fit View"><Maximize2 size={13} /></button>
       <button className={`tb-btn ${showGrid ? 'on' : ''}`} onClick={toggleGrid} data-testid="toggle-grid-btn" title="Toggle Grid"><Grid3X3 size={13} /></button>
       <button className={`tb-btn ${showMinimap ? 'on' : ''}`} onClick={toggleMinimap} data-testid="toggle-minimap-btn" title="Toggle Minimap"><Map size={13} /></button>
+      <button className={`tb-btn ${snapToGrid ? 'on' : ''}`} onClick={toggleSnapToGrid} data-testid="toggle-snap-btn" title="Snap to Grid"><Magnet size={13} /></button>
+      <div className="tb-sep" />
+      <button className="tb-btn" onClick={selectAll} data-testid="select-all-btn" title="Select All (Ctrl+A)" style={{ fontSize: 11, padding: '5px 8px' }}>All</button>
       <div className="tb-sep" />
       <button className="tb-btn" onClick={undo} disabled={!canUndo()} data-testid="undo-btn" title="Undo (Ctrl+Z)"><Undo2 size={13} /></button>
       <button className="tb-btn" onClick={redo} disabled={!canRedo()} data-testid="redo-btn" title="Redo (Ctrl+Shift+Z)"><Redo2 size={13} /></button>

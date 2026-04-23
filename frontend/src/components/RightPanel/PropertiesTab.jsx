@@ -1,7 +1,8 @@
 import React from 'react';
 import useDiagramStore from '../../store/diagramStore';
 import useUIStore from '../../store/uiStore';
-import { Trash2 } from 'lucide-react';
+import { Trash2, GitMerge } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const COLORS = {
   blue: '#1e3a5f', green: '#14362a', purple: '#2d1b5e',
@@ -87,9 +88,33 @@ function TableProps({ node }) {
 }
 
 function EdgeProps({ edge }) {
-  const { updateRelationship, deleteRelationship } = useDiagramStore();
+  const { updateRelationship, deleteRelationship, createJunctionTable } = useDiagramStore();
   const { clearSelection } = useUIStore();
   const rel = edge.data || {};
+
+  const handleTypeChange = (newType) => {
+    updateRelationship(edge.id, { type: newType });
+    if (newType === 'many-to-many') {
+      toast(
+        (t) => (
+          <span style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12 }}>
+            M:N detected
+            <button
+              onClick={() => {
+                const name = createJunctionTable(edge.id);
+                toast.dismiss(t.id);
+                if (name) toast.success(`Junction table "${name}" created`);
+              }}
+              style={{ background: '#4f46e5', color: '#fff', border: 'none', borderRadius: 4, padding: '3px 8px', cursor: 'pointer', fontSize: 11 }}
+            >
+              Auto-create junction table
+            </button>
+          </span>
+        ),
+        { duration: 8000, id: `mn-${edge.id}` }
+      );
+    }
+  };
 
   return (
     <div className="props-panel" data-testid="edge-props">
@@ -97,7 +122,7 @@ function EdgeProps({ edge }) {
         <div className="props-section-title">Relationship</div>
         <div className="props-row">
           <label>Type</label>
-          <select value={rel.type || 'one-to-many'} onChange={(e) => updateRelationship(edge.id, { type: e.target.value })} data-testid="rel-type-select">
+          <select value={rel.type || 'one-to-many'} onChange={(e) => handleTypeChange(e.target.value)} data-testid="rel-type-select">
             {REL_TYPES.map((t) => <option key={t} value={t}>{t}</option>)}
           </select>
         </div>

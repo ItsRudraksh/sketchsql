@@ -29,6 +29,10 @@ export default function useKeyboardShortcuts() {
             if (selectedNodeId) duplicateTable(selectedNodeId);
             e.preventDefault();
             break;
+          case 'a':
+            useDiagramStore.getState().selectAll();
+            e.preventDefault();
+            break;
           default:
             break;
         }
