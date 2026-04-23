@@ -11,6 +11,7 @@ import RelationshipEdge from './Canvas/RelationshipEdge';
 import { getShare } from '../api/apiClient';
 import { generateSQL } from '../utils/sqlGenerator';
 import { generateDjango, generatePrisma, generateSQLAlchemy } from '../utils/ormGenerator';
+import { saveToAutosave } from '../utils/persistence';
 import useDiagramStore from '../store/diagramStore';
 
 const nodeTypes = { tableNode: TableNode };
@@ -87,13 +88,16 @@ export default function ShareView() {
 
   const handleFork = () => {
     if (!state.diagram) return;
-    loadDiagram({
+    const forked = {
       ...state.diagram,
       id: null,
       name: `${state.diagram.name || 'Forked Diagram'} (fork)`,
       createdAt: null,
       updatedAt: null,
-    });
+    };
+    // Persist BEFORE navigate so App's useEffect hydrates from the fork, not the previous autosave.
+    saveToAutosave(forked);
+    loadDiagram(forked);
     toast.success('Forked to editor');
     navigate('/');
   };

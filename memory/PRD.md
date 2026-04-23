@@ -108,6 +108,8 @@ SketchSQL is a visual database schema designer with an integrated AI assistant. 
 | POST | /api/ai/generate-schema | NL prompt → schema JSON |
 | POST | /api/ai/analyze-schema | Schema → analysis markdown |
 | POST | /api/ai/chat | Multi-turn chat with schema context |
+| POST | /api/share | Create read-only shared snapshot → `{ shareId }` |
+| GET | /api/share/{shareId} | Fetch shared diagram + view counter (404 if not found) |
 
 ---
 
@@ -121,6 +123,15 @@ SketchSQL is a visual database schema designer with an integrated AI assistant. 
 - [x] **ERD → ORM code generation** — new **ORM** tab in right panel supporting **Django models.py**, **Prisma schema.prisma**, and **SQLAlchemy** (declarative base); read-only Monaco editor with Copy & Download buttons
 - [x] README.md at `/app/README.md` documenting setup, features, and API contract
 
+### Public Shareable Links (2026-02)
+- [x] **Backend**: `POST /api/share` creates a read-only snapshot in MongoDB `shares` collection, returns 8-char URL-safe `shareId`
+- [x] **Backend**: `GET /api/share/{id}` returns diagram + view counter (auto-increments); 404 for invalid
+- [x] **Frontend routing**: BrowserRouter wraps app — `/` for editor, `/share/:shareId` for read-only view
+- [x] **Header Share button** (`share-btn`) opens ShareModal with auto-generated link and Copy button
+- [x] **ShareView** (public read-only page): diagram name, READ-ONLY badge, view counter, canvas (non-draggable/non-connectable), MySQL/PostgreSQL dialect toggle, SQL tab (copy/download), ORM tab (Django/Prisma/SQLAlchemy), Editor link, 404 view for invalid IDs
+- [x] **Fork to edit** button — clones the shared diagram (name + " (fork)") and navigates to editor. Persists via `saveToAutosave` before navigate to survive App's hydration.
+- [x] Empty-canvas guard — Share modal refuses to POST when no tables exist
+
 ## Prioritized Backlog (P0/P1/P2)
 
 ### P0 (Critical for demo)
@@ -131,6 +142,8 @@ SketchSQL is a visual database schema designer with an integrated AI assistant. 
 - [ ] Relationship label editing (custom FK name)
 - [ ] Verify Export PDF/PNG from header under various zoom levels
 - [ ] Dark/light theme: tune Monaco ORM editor light theme
+- [ ] Share TTL / expiry — optional 30-day cleanup cron on `shares` collection
+- [ ] Share page: add Open Graph meta tags (preview image of ERD) for social sharing
 
 ### P2 (Nice to have)
 - [ ] Collaborative editing
@@ -138,3 +151,5 @@ SketchSQL is a visual database schema designer with an integrated AI assistant. 
 - [ ] Template marketplace
 - [ ] ORM generation: TypeORM, Sequelize, Laravel Eloquent
 - [ ] Schema diff / migration generation between diagram versions
+- [ ] Share password-protection & access control
+- [ ] Share analytics dashboard (top-viewed diagrams)
