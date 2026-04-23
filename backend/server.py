@@ -5,13 +5,21 @@ from typing import List, Optional, Dict, Any
 import os
 import re
 import json
+import secrets
+from datetime import datetime, timezone
 from uuid import uuid4
 from dotenv import load_dotenv
 from openai import AzureOpenAI
+from motor.motor_asyncio import AsyncIOMotorClient
 
 load_dotenv()
 
 app = FastAPI(title="SketchSQL API")
+
+# MongoDB (for shared-diagram snapshots)
+_mongo_client = AsyncIOMotorClient(os.environ["MONGO_URL"])
+_db = _mongo_client[os.environ["DB_NAME"]]
+shares_coll = _db["shares"]
 
 app.add_middleware(
     CORSMiddleware,
@@ -550,3 +558,51 @@ Current schema:
         return {"reply": resp.choices[0].message.content}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+# ─── Share (Read-Only Snapshot) ─────────────────────────────────────────────
+
+class ShareRequest(BaseModel):
+    diagram: Diagram
+
+def _gen_share_id() -> str:
+    # ~8-char URL-safe token; 48 bits of entropy
+    return secrets.token_urlsafe(6).replace("_", "a").replace("-", "b")
+
+@app.post("/api/share")
+async def create_share(req: ShareRequest):
+    try:
+        for _ in range(5):
+            sid = _gen_share_id()
+            if not await shares_coll.find_one({"shareId": sid}, {"_id": 1}):
+                break
+        else:
+            raise HTTPException(status_code=500, detail="Failed to allocate share id")
+        doc = {
+            "shareId": sid,
+            "diagram": req.diagram.dict(),
+            "createdAt": datetime.now(timezone.utc).isoformat(),
+            "views": 0,
+        }
+        await shares_coll.insert_one(doc)
+        return {"shareId": sid}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/share/{share_id}")
+async def get_share(share_id: str):
+    doc = await shares_coll.find_one({"shareId": share_id}, {"_id": 0})
+    if not doc:
+        raise HTTPException(status_code=404, detail="Share not found")
+    # Best-effort view counter (fire-and-forget)
+    try:
+        await shares_coll.update_one({"shareId": share_id}, {"$inc": {"views": 1}})
+    except Exception:
+        pass
+    return {
+        "shareId": doc.get("shareId"),
+        "diagram": doc.get("diagram"),
+        "createdAt": doc.get("createdAt"),
+        "views": (doc.get("views") or 0) + 1,
+    }

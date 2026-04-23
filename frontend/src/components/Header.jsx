@@ -3,12 +3,12 @@ import useDiagramStore from '../store/diagramStore';
 import useUIStore from '../store/uiStore';
 import { exportSQL, exportJSON, exportPNG, exportPDF } from '../utils/exportUtils';
 import toast from 'react-hot-toast';
-import { Database, Sun, Moon, ChevronDown, Save, Download } from 'lucide-react';
+import { Database, Sun, Moon, ChevronDown, Save, Download, Share2 } from 'lucide-react';
 
 export default function Header() {
   const { diagramName, setDiagramName, setDialect } = useDiagramStore();
   const dialect = useDiagramStore((s) => s.dialect);
-  const { theme, toggleTheme, openSaveDiagramModal } = useUIStore();
+  const { theme, toggleTheme, openSaveDiagramModal, openShareModal } = useUIStore();
   const generatedSql = useUIStore((s) => s.generatedSql);
   const [exportOpen, setExportOpen] = useState(false);
   const [editingName, setEditingName] = useState(false);
@@ -83,6 +83,9 @@ export default function Header() {
       <div className="header-right">
         <button className="header-action-btn" onClick={openSaveDiagramModal} data-testid="save-btn">
           <Save size={13} /> Save
+        </button>
+        <button className="header-action-btn" onClick={openShareModal} data-testid="share-btn" title="Create a public shareable link">
+          <Share2 size={13} /> Share
         </button>
         <div className="export-wrap">
           <button className="header-action-btn" onClick={() => setExportOpen(!exportOpen)} data-testid="export-btn">

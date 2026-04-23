@@ -105,3 +105,50 @@ CREATE TABLE products (
         assert len(data["diagram"]["tables"]) == 2
         assert len(data["diagram"]["relationships"]) >= 1
         print("Import SQL with FK passed")
+
+
+class TestShare:
+    """Public share endpoint tests"""
+    share_id = None
+
+    def test_create_share(self):
+        r = requests.post(f"{BASE_URL}/api/share", json={"diagram": SAMPLE_DIAGRAM})
+        assert r.status_code == 200, r.text
+        data = r.json()
+        assert "shareId" in data
+        sid = data["shareId"]
+        assert isinstance(sid, str)
+        assert 6 <= len(sid) <= 12
+        # No underscore/dash per _gen_share_id replacement
+        assert "_" not in sid and "-" not in sid
+        TestShare.share_id = sid
+        print(f"Create share passed: {sid}")
+
+    def test_get_share_and_views_increment(self):
+        assert TestShare.share_id, "share id not set"
+        r1 = requests.get(f"{BASE_URL}/api/share/{TestShare.share_id}")
+        assert r1.status_code == 200
+        d1 = r1.json()
+        assert d1["shareId"] == TestShare.share_id
+        assert "diagram" in d1 and d1["diagram"]["tables"]
+        assert d1["diagram"]["tables"][0]["name"] == "users"
+        assert "views" in d1
+        v1 = d1["views"]
+        r2 = requests.get(f"{BASE_URL}/api/share/{TestShare.share_id}")
+        assert r2.status_code == 200
+        v2 = r2.json()["views"]
+        assert v2 == v1 + 1, f"expected view counter to increment: {v1} -> {v2}"
+        print(f"View counter increments: {v1} -> {v2}")
+
+    def test_get_share_not_found(self):
+        r = requests.get(f"{BASE_URL}/api/share/nonexistent_xyz_404")
+        assert r.status_code == 404
+        print("Invalid share id returns 404")
+
+    def test_share_no_mongo_id_leakage(self):
+        assert TestShare.share_id
+        r = requests.get(f"{BASE_URL}/api/share/{TestShare.share_id}")
+        assert r.status_code == 200
+        # Mongo _id should be excluded from top-level response keys
+        assert "_id" not in r.json()
+        print("No mongo _id leakage at top level")

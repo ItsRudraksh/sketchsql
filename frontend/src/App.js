@@ -8,6 +8,7 @@ import RightPanel from './components/RightPanel/RightPanel';
 import WelcomeScreen from './components/Modals/WelcomeScreen';
 import ImportSqlModal from './components/Modals/ImportSqlModal';
 import SaveDiagramModal from './components/Modals/SaveDiagramModal';
+import ShareModal from './components/Modals/ShareModal';
 import useDiagramStore from './store/diagramStore';
 import useUIStore from './store/uiStore';
 import useAutoSave from './hooks/useAutoSave';
@@ -16,7 +17,7 @@ import { loadFromAutosave } from './utils/persistence';
 
 function App() {
   const { loadDiagram, nodes } = useDiagramStore();
-  const { importSqlModalOpen, saveDiagramModalOpen, theme } = useUIStore();
+  const { importSqlModalOpen, saveDiagramModalOpen, shareModalOpen, theme } = useUIStore();
   const [showWelcome, setShowWelcome] = useState(false);
 
   useAutoSave();
@@ -47,6 +48,7 @@ function App() {
 
       {importSqlModalOpen && <ImportSqlModal />}
       {saveDiagramModalOpen && <SaveDiagramModal />}
+      {shareModalOpen && <ShareModal />}
 
       <Toaster
         position="bottom-right"

@@ -21,4 +21,10 @@ export const aiAnalyzeSchema = (diagram, dialect) =>
 export const aiChat = (messages, diagram, dialect) =>
   API.post('/ai/chat', { messages, diagram, dialect }).then(r => r.data.reply);
 
+export const shareDiagram = (diagram) =>
+  API.post('/share', { diagram }).then(r => r.data.shareId);
+
+export const getShare = (shareId) =>
+  API.get(`/share/${shareId}`).then(r => r.data);
+
 export default API;

@@ -10,6 +10,7 @@ const useUIStore = create((set) => ({
   selectedEdgeId: null,
   importSqlModalOpen: false,
   saveDiagramModalOpen: false,
+  shareModalOpen: false,
   generatedSql: '',
   sqlLoading: false,
 
@@ -25,6 +26,8 @@ const useUIStore = create((set) => ({
   closeImportSqlModal: () => set({ importSqlModalOpen: false }),
   openSaveDiagramModal: () => set({ saveDiagramModalOpen: true }),
   closeSaveDiagramModal: () => set({ saveDiagramModalOpen: false }),
+  openShareModal: () => set({ shareModalOpen: true }),
+  closeShareModal: () => set({ shareModalOpen: false }),
   setGeneratedSql: (sql) => set({ generatedSql: sql }),
   setSqlLoading: (v) => set({ sqlLoading: v }),
 }));
