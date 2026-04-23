@@ -111,20 +111,30 @@ SketchSQL is a visual database schema designer with an integrated AI assistant. 
 
 ---
 
+## Implemented Features — Update 2026-02 (P1 batch)
+
+### Canvas & UX Enhancements
+- [x] **Ctrl+A / Cmd+A** keyboard shortcut to select all tables (wired via `useKeyboardShortcuts` hook)
+- [x] **Select All** toolbar button (`select-all-btn`) in CanvasToolbar
+- [x] **Snap-to-grid toggle** (`toggle-snap-btn`) — snapGrid=[20,20] applied to ReactFlow
+- [x] **M:N junction table toast** — when relationship type is changed to `many-to-many`, a persistent toast offers an `Auto-create junction table` button which spawns a properly-named junction table with composite PK and redirects both FK edges
+- [x] **ERD → ORM code generation** — new **ORM** tab in right panel supporting **Django models.py**, **Prisma schema.prisma**, and **SQLAlchemy** (declarative base); read-only Monaco editor with Copy & Download buttons
+- [x] README.md at `/app/README.md` documenting setup, features, and API contract
+
 ## Prioritized Backlog (P0/P1/P2)
 
 ### P0 (Critical for demo)
-- [ ] Verify AI chat with real Azure OpenAI key
-- [ ] Test large diagrams (20+ tables) performance
+- [ ] Verify AI chat with real Azure OpenAI key under sustained load
+- [ ] Test large diagrams (20+ tables) performance (ReactFlow render, SQL debounce)
 
 ### P1 (Enhancement)
-- [ ] Keyboard shortcut Ctrl+A (select all tables)
-- [ ] Snap-to-grid toggle
 - [ ] Relationship label editing (custom FK name)
-- [ ] Many-to-Many auto-junction table creation toast/button
+- [ ] Verify Export PDF/PNG from header under various zoom levels
+- [ ] Dark/light theme: tune Monaco ORM editor light theme
 
 ### P2 (Nice to have)
 - [ ] Collaborative editing
-- [ ] Version history
+- [ ] Version history (beyond undo stack)
 - [ ] Template marketplace
-- [ ] ERD to code generation (ORM models)
+- [ ] ORM generation: TypeORM, Sequelize, Laravel Eloquent
+- [ ] Schema diff / migration generation between diagram versions
