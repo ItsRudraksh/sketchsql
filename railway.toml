@@ -1,0 +1,16 @@
+# Railway service setup (configured in the Railway dashboard):
+# - Root Directory: /backend
+# - Config-as-Code file: /railway.toml
+# - Add MONGO_URL, DB_NAME, and any Azure OpenAI variables as service variables.
+#   Do not upload backend/.env.
+
+[build]
+builder = "RAILPACK"
+
+[deploy]
+# Railway supplies PORT; FastAPI must bind to it on all network interfaces.
+startCommand = "uvicorn server:app --host 0.0.0.0 --port $PORT"
+healthcheckPath = "/api/"
+healthcheckTimeout = 100
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
