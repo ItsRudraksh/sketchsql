@@ -1,13 +1,12 @@
 import React, { useState } from 'react';
 import useDiagramStore from '../store/diagramStore';
 import useUIStore from '../store/uiStore';
-import { exportSQL, exportJSON, exportPNG, exportPDF } from '../utils/exportUtils';
+import { exportSQL, exportJSON, exportPNG, exportPDF, exportSVG } from '../utils/exportUtils';
 import toast from 'react-hot-toast';
 import { Database, Sun, Moon, ChevronDown, Save, Download, Share2 } from 'lucide-react';
 
 export default function Header() {
-  const { diagramName, setDiagramName, setDialect } = useDiagramStore();
-  const dialect = useDiagramStore((s) => s.dialect);
+  const { diagramName, setDiagramName } = useDiagramStore();
   const { theme, toggleTheme, openSaveDiagramModal, openShareModal } = useUIStore();
   const generatedSql = useUIStore((s) => s.generatedSql);
   const [exportOpen, setExportOpen] = useState(false);
@@ -22,6 +21,7 @@ export default function Header() {
       else if (type === 'json') exportJSON(diagram);
       else if (type === 'png') await exportPNG('.react-flow', diagram.name);
       else if (type === 'pdf') await exportPDF('.react-flow', diagram.name);
+      else if (type === 'svg') await exportSVG('.react-flow', diagram.name);
       toast.success(`Exported as ${type.toUpperCase()}`);
     } catch {
       toast.error('Export failed');
@@ -65,21 +65,6 @@ export default function Header() {
         )}
       </div>
 
-      <div className="header-center">
-        <div className="dialect-toggle" data-testid="dialect-toggle">
-          <button
-            className={`dialect-btn ${dialect === 'mysql' ? 'active' : ''}`}
-            onClick={() => handleDialect('mysql')}
-            data-testid="dialect-mysql"
-          >MySQL</button>
-          <button
-            className={`dialect-btn ${dialect === 'postgresql' ? 'active' : ''}`}
-            onClick={() => handleDialect('postgresql')}
-            data-testid="dialect-postgresql"
-          >PostgreSQL</button>
-        </div>
-      </div>
-
       <div className="header-right">
         <button className="header-action-btn" onClick={openSaveDiagramModal} data-testid="save-btn">
           <Save size={13} /> Save
@@ -97,8 +82,9 @@ export default function Header() {
               <div className="dropdown-menu" data-testid="export-menu">
                 <button onClick={() => handleExport('sql')}>Export SQL (.sql)</button>
                 <button onClick={() => handleExport('json')}>Export JSON (.json)</button>
-                <button onClick={() => handleExport('png')}>Export PNG</button>
-                <button onClick={() => handleExport('pdf')}>Export PDF</button>
+                <button onClick={() => handleExport('png')}>Export PNG (HD Image)</button>
+                <button onClick={() => handleExport('pdf')}>Export PDF (Document)</button>
+                <button onClick={() => handleExport('svg')}>Export SVG (Vector Graphics)</button>
               </div>
             </>
           )}

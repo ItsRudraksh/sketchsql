@@ -14,7 +14,11 @@ export default function ShareModal() {
   const [copied, setCopied] = useState(false);
   const [err, setErr] = useState('');
 
-  const shareUrl = shareId ? `${window.location.origin}/share/${shareId}` : '';
+  // A local browser origin creates a link that only works on this computer.
+  // Set REACT_APP_PUBLIC_APP_URL when developing locally against a deployed
+  // frontend so the copied link points to the public application instead.
+  const appUrl = (process.env.REACT_APP_PUBLIC_APP_URL || window.location.origin).replace(/\/+$/, '');
+  const shareUrl = shareId ? `${appUrl}/share/${shareId}` : '';
 
   const handleCreate = async () => {
     setCreating(true);

@@ -12,6 +12,10 @@ function toPascal(str) {
   return str.replace(/[_\s]+(.)/g, (_, c) => c.toUpperCase()).replace(/^[a-z]/, (c) => c.toUpperCase());
 }
 
+function toCamel(str) {
+  return str.replace(/[_\s]+(.)/g, (_, c) => c.toUpperCase()).replace(/^[A-Z]/, (c) => c.toLowerCase());
+}
+
 // ─── Django ───────────────────────────────────────────────────────────────
 
 function djangoField(col) {
@@ -248,4 +252,142 @@ export function generateSQLAlchemy(diagram) {
   }
 
   return lines.join('\n');
+}
+
+// ─── Spring Data JPA / Hibernate ──────────────────────────────────────────
+
+function javaType(col) {
+  const { base } = extractType(col.type);
+  if (col.autoIncrement || base === 'BIGINT') return 'Long';
+  const m = {
+    INT: 'Integer',
+    SMALLINT: 'Integer',
+    TINYINT: 'Integer',
+    BIGINT: 'Long',
+    VARCHAR: 'String',
+    TEXT: 'String',
+    BOOLEAN: 'Boolean',
+    DATE: 'LocalDate',
+    DATETIME: 'LocalDateTime',
+    TIMESTAMP: 'LocalDateTime',
+    DECIMAL: 'BigDecimal',
+    UUID: 'UUID',
+    FLOAT: 'Double',
+    DOUBLE: 'Double',
+    JSON: 'String',
+  };
+  return m[base] || 'String';
+}
+
+export function generateSpringJPA(diagram) {
+  const { tables = [], relationships = [] } = diagram;
+  if (!tables.length) return '// No tables defined\n// Add tables to the canvas to generate Spring Data JPA entities';
+
+  const tmap = Object.fromEntries(tables.map((t) => [t.id, t]));
+  const cmap = {};
+  tables.forEach((t) => t.columns?.forEach((c) => { cmap[c.id] = c; }));
+
+  const codeBlocks = [];
+
+  for (const table of tables) {
+    const className = toPascal(table.name);
+    const fkRelsForTable = relationships.filter((r) => r.type !== 'many-to-many' && r.sourceTableId === table.id);
+    const m2mRelsForTable = relationships.filter((r) => r.type === 'many-to-many' && r.sourceTableId === table.id);
+    const fkColIds = new Set(fkRelsForTable.map((r) => r.sourceColumnId));
+    const backRels = relationships.filter((r) => r.type !== 'many-to-many' && r.targetTableId === table.id);
+
+    const lines = [
+      `// ==========================================`,
+      `// Entity: ${className}.java (Spring Data JPA / Hibernate)`,
+      `// ==========================================`,
+      `package com.example.model;\n`,
+      `import jakarta.persistence.*;`,
+      `import java.time.LocalDateTime;`,
+      `import java.time.LocalDate;`,
+      `import java.math.BigDecimal;`,
+      `import java.util.UUID;`,
+      `import java.util.List;`,
+      `import java.util.Set;\n`,
+      `@Entity`,
+      `@Table(name = "${table.name}")`,
+      `public class ${className} {\n`,
+    ];
+
+    for (const col of table.columns || []) {
+      if (fkColIds.has(col.id)) continue;
+      const type = javaType(col);
+
+      if (col.primaryKey) {
+        lines.push(`    @Id`);
+        if (col.autoIncrement) {
+          lines.push(`    @GeneratedValue(strategy = GenerationType.IDENTITY)`);
+        } else if (type === 'UUID') {
+          lines.push(`    @GeneratedValue(strategy = GenerationType.AUTO)`);
+        }
+      }
+
+      const colAttrs = [`name = "${col.name}"`];
+      if (!col.nullable && !col.primaryKey) colAttrs.push('nullable = false');
+      if (col.unique && !col.primaryKey) colAttrs.push('unique = true');
+      const { params } = extractType(col.type);
+      if (params[0] && type === 'String') colAttrs.push(`length = ${params[0]}`);
+
+      lines.push(`    @Column(${colAttrs.join(', ')})`);
+      lines.push(`    private ${type} ${toCamel(col.name)};\n`);
+    }
+
+    for (const rel of fkRelsForTable) {
+      const srcCol = cmap[rel.sourceColumnId];
+      const tgt = tmap[rel.targetTableId];
+      const tgtCol = cmap[rel.targetColumnId];
+      if (!srcCol || !tgt || !tgtCol) continue;
+
+      const tgtClass = toPascal(tgt.name);
+      const fieldName = toCamel(srcCol.name.endsWith('_id') ? srcCol.name.slice(0, -3) : srcCol.name);
+      const isOneToOne = rel.type === 'one-to-one';
+
+      if (isOneToOne) {
+        lines.push(`    @OneToOne(fetch = FetchType.LAZY)`);
+      } else {
+        lines.push(`    @ManyToOne(fetch = FetchType.LAZY)`);
+      }
+      lines.push(`    @JoinColumn(name = "${srcCol.name}", referencedColumnName = "${tgtCol.name}"${srcCol.nullable ? '' : ', nullable = false'})`);
+      lines.push(`    private ${tgtClass} ${fieldName};\n`);
+    }
+
+    for (const rel of backRels) {
+      const src = tmap[rel.sourceTableId];
+      if (!src) continue;
+      const srcClass = toPascal(src.name);
+      const fieldName = toCamel(src.name) + (rel.type !== 'one-to-one' ? 'List' : '');
+
+      if (rel.type === 'one-to-one') {
+        lines.push(`    @OneToOne(mappedBy = "${toCamel(table.name)}", cascade = CascadeType.ALL, fetch = FetchType.LAZY)`);
+        lines.push(`    private ${srcClass} ${fieldName};\n`);
+      } else {
+        lines.push(`    @OneToMany(mappedBy = "${toCamel(table.name)}", cascade = CascadeType.ALL, fetch = FetchType.LAZY)`);
+        lines.push(`    private List<${srcClass}> ${fieldName};\n`);
+      }
+    }
+
+    for (const rel of m2mRelsForTable) {
+      const tgt = tmap[rel.targetTableId];
+      if (!tgt) continue;
+      const tgtClass = toPascal(tgt.name);
+      const fieldName = toCamel(tgt.name) + 'Set';
+      lines.push(`    @ManyToMany`);
+      lines.push(`    @JoinTable(`);
+      lines.push(`        name = "${table.name}_${tgt.name}",`);
+      lines.push(`        joinColumns = @JoinColumn(name = "${table.name}_id"),`);
+      lines.push(`        inverseJoinColumns = @JoinColumn(name = "${tgt.name}_id")`);
+      lines.push(`    )`);
+      lines.push(`    private Set<${tgtClass}> ${fieldName};\n`);
+    }
+
+    lines.push(`    public ${className}() {}\n`);
+    lines.push(`}\n`);
+    codeBlocks.push(lines.join('\n'));
+  }
+
+  return codeBlocks.join('\n\n');
 }

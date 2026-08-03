@@ -10,7 +10,7 @@ import TableNode from './Canvas/TableNode';
 import RelationshipEdge from './Canvas/RelationshipEdge';
 import { getShare } from '../api/apiClient';
 import { generateSQL } from '../utils/sqlGenerator';
-import { generateDjango, generatePrisma, generateSQLAlchemy } from '../utils/ormGenerator';
+import { generateDjango, generatePrisma, generateSQLAlchemy, generateSpringJPA } from '../utils/ormGenerator';
 import { saveToAutosave } from '../utils/persistence';
 import useDiagramStore from '../store/diagramStore';
 
@@ -48,7 +48,7 @@ export default function ShareView() {
   const [state, setState] = useState({ status: 'loading', diagram: null, err: '', views: 0 });
   const [dialect, setDialect] = useState('mysql');
   const [tab, setTab] = useState('sql');
-  const [ormFmt, setOrmFmt] = useState('django');
+  const [ormFmt, setOrmFmt] = useState('jpa');
 
   useEffect(() => {
     let cancelled = false;
@@ -81,6 +81,7 @@ export default function ShareView() {
 
   const orm = useMemo(() => {
     if (!state.diagram) return '';
+    if (ormFmt === 'jpa') return generateSpringJPA(state.diagram);
     if (ormFmt === 'django') return generateDjango(state.diagram);
     if (ormFmt === 'prisma') return generatePrisma(state.diagram);
     return generateSQLAlchemy(state.diagram);
@@ -261,24 +262,26 @@ export default function ShareView() {
 
           {tab === 'orm' && (
             <div style={{ flex: 1, display: 'flex', flexDirection: 'column' }}>
-              <div style={{ padding: '8px 10px', display: 'flex', gap: 6, borderBottom: '1px solid #1e293b', flexWrap: 'wrap' }}>
-                {[
-                  ['django', 'Django'],
-                  ['prisma', 'Prisma'],
-                  ['sqlalchemy', 'SQLAlchemy'],
-                ].map(([k, label]) => (
-                  <button
-                    key={k}
-                    className={`dialect-btn ${ormFmt === k ? 'active' : ''}`}
-                    onClick={() => setOrmFmt(k)}
-                    data-testid={`share-orm-${k}`}
-                  >{label}</button>
-                ))}
+              <div style={{ padding: '8px 10px', display: 'flex', gap: 8, borderBottom: '1px solid #1e293b', alignItems: 'center' }}>
+                <div className="orm-select-wrap">
+                  <span className="orm-select-label">Target:</span>
+                  <select
+                    className="orm-select-dropdown"
+                    value={ormFmt}
+                    onChange={(e) => setOrmFmt(e.target.value)}
+                    data-testid="share-orm-select"
+                  >
+                    <option value="jpa">Spring JPA (.java)</option>
+                    <option value="django">Django (.py)</option>
+                    <option value="prisma">Prisma (.prisma)</option>
+                    <option value="sqlalchemy">SQLAlchemy (.py)</option>
+                  </select>
+                </div>
                 <div style={{ flex: 1 }} />
                 <button className="header-action-btn" onClick={() => copy(orm)} data-testid="share-copy-orm"><Copy size={12} /></button>
                 <button
                   className="header-action-btn"
-                  onClick={() => download(orm, ormFmt === 'prisma' ? 'prisma' : 'py', 'text/plain')}
+                  onClick={() => download(orm, ormFmt === 'jpa' ? 'java' : (ormFmt === 'prisma' ? 'prisma' : 'py'), 'text/plain')}
                   data-testid="share-download-orm"
                 ><Download size={12} /></button>
               </div>

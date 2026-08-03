@@ -123,6 +123,30 @@ yarn start
 
 The app will open at `http://localhost:3000`.
 
+### Public share links versus localhost
+
+MongoDB Atlas stores the snapshot, but it does not make the app running on your
+computer publicly reachable. If the frontend is running at
+`http://localhost:3000`, a link such as `http://localhost:3000/share/<id>` only
+works on that same computer.
+
+To let other people open a share link, deploy both the frontend and backend to
+public HTTPS URLs, set `REACT_APP_BACKEND_URL` to the public backend origin
+(without `/api`), and set this optional frontend build variable to the public
+frontend origin:
+
+```env
+REACT_APP_PUBLIC_APP_URL=https://your-frontend.example.com
+```
+
+When that variable is omitted, the app continues to use its current browser
+origin, which is the correct default for a deployed frontend.
+
+If `localhost:8001` gives an empty reply even though Uvicorn is running, another
+process has claimed the loopback port. Start Uvicorn on an unused port and put
+the same origin in `frontend/.env`; then restart the frontend because React
+embeds `REACT_APP_*` values at startup.
+
 ---
 
 ### 4. Verify everything works

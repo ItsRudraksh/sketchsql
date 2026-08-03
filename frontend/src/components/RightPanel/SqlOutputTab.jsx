@@ -59,15 +59,26 @@ export default function SqlOutputTab() {
   return (
     <div className="sql-tab" data-testid="sql-tab">
       <div className="sql-toolbar">
-        <button
-          className="sql-gen-btn"
-          onClick={handleGenerateViaAPI}
-          disabled={sqlLoading}
-          data-testid="generate-sql-btn"
-        >
-          <RefreshCw size={12} className={sqlLoading ? 'spin' : ''} />
-          {sqlLoading ? 'Generating...' : 'Generate SQL'}
-        </button>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            className="sql-gen-btn"
+            onClick={handleGenerateViaAPI}
+            disabled={sqlLoading}
+            data-testid="generate-sql-btn"
+          >
+            <RefreshCw size={12} className={sqlLoading ? 'spin' : ''} />
+            {sqlLoading ? 'Generating...' : 'Generate SQL'}
+          </button>
+          <select
+            className="orm-select-dropdown"
+            value={dialect}
+            onChange={(e) => useDiagramStore.getState().setDialect(e.target.value)}
+            data-testid="sql-dialect-select"
+          >
+            <option value="mysql">MySQL</option>
+            <option value="postgresql">PostgreSQL</option>
+          </select>
+        </div>
         <div className="sql-toolbar-right">
           <button className="sql-icon-btn" onClick={handleCopy} title="Copy" data-testid="copy-sql-btn">
             <Copy size={13} />

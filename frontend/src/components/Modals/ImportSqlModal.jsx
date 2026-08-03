@@ -35,13 +35,14 @@ export default function ImportSqlModal() {
     if (!sql.trim()) return;
     setLoading(true);
     try {
-      const diagram = await importSQL(sql, dialect);
+      const diagram = await importSQL(sql);
       if (!diagram.tables?.length) {
         toast.error('No tables found in SQL');
         return;
       }
       const laid = autoLayout(diagram.tables, diagram.relationships || []);
-      loadDiagram({ ...diagram, tables: laid, dialect });
+      const detectedDialect = diagram.dialect || dialect || 'mysql';
+      loadDiagram({ ...diagram, tables: laid, dialect: detectedDialect });
       toast.success(`Imported ${diagram.tables.length} tables`);
       closeImportSqlModal();
     } catch {
@@ -59,7 +60,9 @@ export default function ImportSqlModal() {
           <button className="modal-close" onClick={closeImportSqlModal}><X size={16} /></button>
         </div>
         <div className="modal-body">
-          <p className="modal-hint">Paste existing CREATE TABLE SQL statements. Foreign key relationships will be detected automatically.</p>
+          <p className="modal-hint">
+            Paste existing CREATE TABLE SQL statements. Foreign key relationships are detected automatically. (Supported syntax: MySQL & PostgreSQL — auto-detected)
+          </p>
           <textarea
             className="sql-paste-area"
             value={sql}

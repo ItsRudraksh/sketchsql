@@ -1,19 +1,20 @@
 import React, { useState, useEffect, useRef } from 'react';
 import Editor from '@monaco-editor/react';
 import useDiagramStore from '../../store/diagramStore';
-import { generateDjango, generatePrisma, generateSQLAlchemy } from '../../utils/ormGenerator';
+import { generateDjango, generatePrisma, generateSQLAlchemy, generateSpringJPA } from '../../utils/ormGenerator';
 import { downloadFile } from '../../utils/exportUtils';
 import toast from 'react-hot-toast';
 import { Copy, Download } from 'lucide-react';
 
 const FORMATS = [
+  { id: 'jpa', label: 'Spring JPA', ext: '.java', lang: 'java' },
   { id: 'django', label: 'Django', ext: '.py', lang: 'python' },
   { id: 'prisma', label: 'Prisma', ext: '.prisma', lang: 'typescript' },
   { id: 'sqlalchemy', label: 'SQLAlchemy', ext: '.py', lang: 'python' },
 ];
 
 export default function OrmOutputTab() {
-  const [format, setFormat] = useState('django');
+  const [format, setFormat] = useState('jpa');
   const [code, setCode] = useState('');
   const nodes = useDiagramStore((s) => s.nodes);
   const edges = useDiagramStore((s) => s.edges);
@@ -22,7 +23,8 @@ export default function OrmOutputTab() {
   const generate = () => {
     const diagram = useDiagramStore.getState().getDiagramJSON();
     let result = '';
-    if (format === 'django') result = generateDjango(diagram);
+    if (format === 'jpa') result = generateSpringJPA(diagram);
+    else if (format === 'django') result = generateDjango(diagram);
     else if (format === 'prisma') result = generatePrisma(diagram);
     else result = generateSQLAlchemy(diagram);
     setCode(result);
@@ -50,17 +52,20 @@ export default function OrmOutputTab() {
   return (
     <div className="orm-tab" data-testid="orm-tab">
       <div className="orm-toolbar">
-        <div className="orm-format-btns">
-          {FORMATS.map((f) => (
-            <button
-              key={f.id}
-              className={`orm-fmt-btn ${format === f.id ? 'active' : ''}`}
-              onClick={() => setFormat(f.id)}
-              data-testid={`orm-format-${f.id}`}
-            >
-              {f.label}
-            </button>
-          ))}
+        <div className="orm-select-wrap">
+          <span className="orm-select-label">Target ORM:</span>
+          <select
+            className="orm-select-dropdown"
+            value={format}
+            onChange={(e) => setFormat(e.target.value)}
+            data-testid="orm-format-select"
+          >
+            {FORMATS.map((f) => (
+              <option key={f.id} value={f.id}>
+                {f.label} ({f.ext})
+              </option>
+            ))}
+          </select>
         </div>
         <div className="orm-toolbar-right">
           <button className="sql-icon-btn" onClick={handleCopy} title="Copy" data-testid="copy-orm-btn">

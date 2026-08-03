@@ -7,12 +7,17 @@ import re
 import json
 import secrets
 from datetime import datetime, timezone
+from pathlib import Path
 from uuid import uuid4
 from dotenv import load_dotenv
 from openai import AzureOpenAI
 from motor.motor_asyncio import AsyncIOMotorClient
+import sqlglot
+from sqlglot import exp
 
-load_dotenv()
+# Resolve this file explicitly so the backend loads its settings whether it is
+# started from backend/ (as in the README) or from the repository root.
+load_dotenv(Path(__file__).with_name(".env"))
 
 app = FastAPI(title="SketchSQL API")
 
@@ -306,118 +311,252 @@ def generate_postgresql(diagram: Diagram) -> str:
 
 # ─── SQL Parser ─────────────────────────────────────────────────────────────
 
-def split_by_commas(s: str) -> List[str]:
-    parts, depth, cur = [], 0, []
-    for ch in s:
-        if ch == "(":
-            depth += 1
-            cur.append(ch)
-        elif ch == ")":
-            depth -= 1
-            cur.append(ch)
-        elif ch == "," and depth == 0:
-            parts.append("".join(cur).strip())
-            cur = []
-        else:
-            cur.append(ch)
-    if cur:
-        parts.append("".join(cur).strip())
-    return parts
-
 def parse_sql(sql_string: str, dialect: str = "mysql") -> dict:
-    tables, rels, pending_fks = [], [], []
-    sql_clean = re.sub(r"--[^\n]*", "", sql_string)
-    sql_clean = re.sub(r"/\*.*?\*/", "", sql_clean, flags=re.DOTALL)
-    pattern = re.compile(
-        r"CREATE\s+TABLE\s+(?:IF\s+NOT\s+EXISTS\s+)?[`\"\[]?(\w+)[`\"\]]?\s*\((.*?)\)\s*(?:ENGINE\s*=\s*\w+[^;]*)?;",
-        re.IGNORECASE | re.DOTALL,
-    )
+    tables = []
+    rels = []
+    
+    primary_dialect = "postgres" if dialect.lower() in ("postgresql", "postgres") else "mysql"
+    candidate_dialects = [primary_dialect, "postgres", "mysql", "sqlite", None]
+    
+    seen = set()
+    dialects_to_try = [d for d in candidate_dialects if not (d in seen or seen.add(d))]
+
+    parsed_statements = []
+    detected_dialect = "mysql"
+    for d in dialects_to_try:
+        try:
+            stmts = [s for s in sqlglot.parse(sql_string, read=d) if s is not None]
+            table_stmts = [s for s in stmts if isinstance(s, exp.Create) and s.kind == "TABLE"]
+            if table_stmts:
+                parsed_statements = stmts
+                detected_dialect = "postgresql" if d == "postgres" else (d or "mysql")
+                break
+        except Exception:
+            continue
+
     tname_to_id: Dict[str, str] = {}
     ckey_to_id: Dict[tuple, str] = {}
+    table_pks: Dict[str, List[str]] = {}
+    pending_fks: List[dict] = []
 
-    for m in pattern.finditer(sql_clean):
-        tname, tbody = m.group(1), m.group(2)
+    def get_name(expr) -> str:
+        if not expr:
+            return ""
+        if isinstance(expr, exp.Schema):
+            return get_name(expr.this)
+        if isinstance(expr, (exp.Table, exp.Identifier, exp.Column)):
+            return expr.name
+        if hasattr(expr, "this"):
+            return get_name(expr.this)
+        return str(expr)
+
+    # Pass 1: Parse CREATE TABLE statements
+    for stmt in parsed_statements:
+        if not (isinstance(stmt, exp.Create) and stmt.kind == "TABLE"):
+            continue
+
+        schema_expr = stmt.this
+        if not isinstance(schema_expr, exp.Schema):
+            tname = get_name(schema_expr)
+            tid = f"t_{uuid4().hex[:8]}"
+            tname_to_id[tname.lower()] = tid
+            tables.append({"id": tid, "name": tname, "color": "gray", "columns": [], "position": {"x": 0, "y": 0}})
+            continue
+
+        tname = get_name(schema_expr.this)
         tid = f"t_{uuid4().hex[:8]}"
         tname_to_id[tname.lower()] = tid
-        columns, pk_names, fks = [], [], []
 
-        for line in split_by_commas(tbody):
-            line = line.strip()
-            if not line:
-                continue
-            # PRIMARY KEY constraint
-            pk_m = re.match(r"^PRIMARY\s+KEY\s*\(([^)]+)\)", line, re.IGNORECASE)
-            if pk_m:
-                pk_names.extend(s.strip().strip("`\"'") for s in pk_m.group(1).split(","))
-                continue
-            # FOREIGN KEY
-            fk_m = re.match(
-                r"^(?:CONSTRAINT\s+\w+\s+)?FOREIGN\s+KEY\s*\(([^)]+)\)\s+REFERENCES\s+[`\"\[]?(\w+)[`\"\]]?\s*\(([^)]+)\)"
-                r"(?:\s+ON\s+DELETE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION|SET\s+DEFAULT))?"
-                r"(?:\s+ON\s+UPDATE\s+(CASCADE|SET\s+NULL|RESTRICT|NO\s+ACTION|SET\s+DEFAULT))?",
-                line, re.IGNORECASE,
-            )
-            if fk_m:
-                fks.append({
-                    "src_table": tname,
-                    "src_col": fk_m.group(1).strip().strip("`\"'"),
-                    "ref_table": fk_m.group(2),
-                    "ref_col": fk_m.group(3).strip().strip("`\"'"),
-                    "on_delete": (fk_m.group(4) or "RESTRICT").upper(),
-                    "on_update": (fk_m.group(5) or "RESTRICT").upper(),
-                })
-                continue
-            # Skip index lines
-            if re.match(r"^(?:UNIQUE\s+)?(?:KEY|INDEX)\s+", line, re.IGNORECASE):
-                continue
-            # Column definition
-            col_m = re.match(r"^[`\"\[]?(\w+)[`\"\]]?\s+(\S+(?:\s*\([^)]*\))?)(.*)", line)
-            if col_m and not re.match(r"^(PRIMARY|UNIQUE|KEY|INDEX|CONSTRAINT|CHECK)\b", col_m.group(1), re.IGNORECASE):
-                cname, raw_t, rest = col_m.group(1), col_m.group(2), col_m.group(3)
-                ct = raw_t.upper()
-                auto_inc = bool(re.search(r"\bAUTO_INCREMENT\b", rest, re.IGNORECASE))
+        columns = []
+        pk_names = []
+        fks = []
+
+        for e in schema_expr.expressions:
+            if isinstance(e, exp.ColumnDef):
+                cname = get_name(e.this)
+                raw_type = e.kind.sql() if e.kind else "VARCHAR"
+                ct = raw_type.upper()
+
+                primary_key = False
+                auto_increment = False
+                nullable = True
+                unique = False
+                default_val = ""
+
                 if ct in ("SERIAL", "BIGSERIAL"):
-                    auto_inc = True
+                    auto_increment = True
                     ct = "BIGINT" if ct == "BIGSERIAL" else "INT"
+
+                for constraint in e.constraints:
+                    kind = constraint.kind
+                    if isinstance(kind, exp.PrimaryKeyColumnConstraint):
+                        primary_key = True
+                        nullable = False
+                    elif isinstance(kind, exp.AutoIncrementColumnConstraint):
+                        auto_increment = True
+                    elif isinstance(kind, exp.NotNullColumnConstraint):
+                        nullable = False
+                    elif isinstance(kind, exp.UniqueColumnConstraint):
+                        unique = True
+                    elif isinstance(kind, exp.DefaultColumnConstraint):
+                        dv_expr = constraint.expression or kind.this
+                        if dv_expr:
+                            default_val = dv_expr.sql().strip("'\"")
+                    elif isinstance(kind, exp.Reference):
+                        ref_schema = kind.this
+                        ref_tname = get_name(ref_schema)
+                        ref_col = ""
+                        if isinstance(ref_schema, exp.Schema) and ref_schema.expressions:
+                            ref_col = get_name(ref_schema.expressions[0])
+
+                        on_delete = "RESTRICT"
+                        on_update = "RESTRICT"
+                        for opt in (kind.args.get("options") or []):
+                            opt_str = str(opt).upper()
+                            if "ON DELETE" in opt_str:
+                                on_delete = opt_str.replace("ON DELETE", "").strip()
+                            elif "ON UPDATE" in opt_str:
+                                on_update = opt_str.replace("ON UPDATE", "").strip()
+
+                        fks.append({
+                            "src_table": tname,
+                            "src_col": cname,
+                            "ref_table": ref_tname,
+                            "ref_col": ref_col,
+                            "on_delete": on_delete,
+                            "on_update": on_update,
+                        })
+
                 cid = f"c_{uuid4().hex[:8]}"
                 col = {
-                    "id": cid, "name": cname, "type": ct,
-                    "primaryKey": bool(re.search(r"\bPRIMARY\s+KEY\b", rest, re.IGNORECASE)),
-                    "autoIncrement": auto_inc,
-                    "nullable": not bool(re.search(r"\bNOT\s+NULL\b", rest, re.IGNORECASE)),
-                    "unique": bool(re.search(r"\bUNIQUE\b", rest, re.IGNORECASE)),
-                    "defaultValue": "",
+                    "id": cid,
+                    "name": cname,
+                    "type": ct,
+                    "primaryKey": primary_key,
+                    "autoIncrement": auto_increment,
+                    "nullable": nullable,
+                    "unique": unique,
+                    "defaultValue": default_val,
                 }
-                dv_m = re.search(r"\bDEFAULT\s+('([^']*)'|\"([^\"]*)\"|(\S+))", rest, re.IGNORECASE)
-                if dv_m:
-                    col["defaultValue"] = dv_m.group(2) or dv_m.group(3) or dv_m.group(4) or ""
                 columns.append(col)
                 ckey_to_id[(tname.lower(), cname.lower())] = cid
+                if primary_key:
+                    pk_names.append(cname)
 
-        for pk in pk_names:
-            for c in columns:
-                if c["name"].lower() == pk.lower():
-                    c["primaryKey"] = True
-                    c["nullable"] = False
+            elif isinstance(e, exp.PrimaryKey):
+                for pk_col in e.expressions:
+                    pk_names.append(get_name(pk_col))
 
+            elif isinstance(e, exp.ForeignKey):
+                src_cols = [get_name(c) for c in e.expressions]
+                ref_obj = e.args.get("reference")
+                if ref_obj:
+                    ref_tname = get_name(ref_obj.this)
+                    ref_cols = []
+                    if isinstance(ref_obj.this, exp.Schema) and ref_obj.this.expressions:
+                        ref_cols = [get_name(c) for c in ref_obj.this.expressions]
+
+                    on_delete = "RESTRICT"
+                    on_update = "RESTRICT"
+                    for opt in (ref_obj.args.get("options") or []):
+                        opt_str = str(opt).upper()
+                        if "ON DELETE" in opt_str:
+                            on_delete = opt_str.replace("ON DELETE", "").strip()
+                        elif "ON UPDATE" in opt_str:
+                            on_update = opt_str.replace("ON UPDATE", "").strip()
+
+                    for i, scol in enumerate(src_cols):
+                        rcol = ref_cols[i] if i < len(ref_cols) else ""
+                        fks.append({
+                            "src_table": tname,
+                            "src_col": scol,
+                            "ref_table": ref_tname,
+                            "ref_col": rcol,
+                            "on_delete": on_delete,
+                            "on_update": on_update,
+                        })
+
+        for col in columns:
+            if col["name"].lower() in [p.lower() for p in pk_names]:
+                col["primaryKey"] = True
+                col["nullable"] = False
+
+        table_pks[tname.lower()] = [c["name"].lower() for c in columns if c["primaryKey"]] or [p.lower() for p in pk_names] or ["id"]
         pending_fks.extend(fks)
         tables.append({"id": tid, "name": tname, "color": "gray", "columns": columns, "position": {"x": 0, "y": 0}})
 
+    # Pass 2: Parse ALTER TABLE statements
+    for stmt in parsed_statements:
+        if isinstance(stmt, exp.Alter):
+            tname = get_name(stmt.this)
+            actions = stmt.args.get("actions") or []
+            for act in actions:
+                fk_node = None
+                if isinstance(act, exp.Add):
+                    this_obj = act.this
+                    if isinstance(this_obj, exp.ForeignKey):
+                        fk_node = this_obj
+                    elif isinstance(this_obj, exp.Constraint):
+                        for sub in this_obj.expressions:
+                            if isinstance(sub, exp.ForeignKey):
+                                fk_node = sub
+
+                if fk_node:
+                    src_cols = [get_name(c) for c in fk_node.expressions]
+                    ref_obj = fk_node.args.get("reference")
+                    if ref_obj:
+                        ref_tname = get_name(ref_obj.this)
+                        ref_cols = []
+                        if isinstance(ref_obj.this, exp.Schema) and ref_obj.this.expressions:
+                            ref_cols = [get_name(c) for c in ref_obj.this.expressions]
+
+                        on_delete = "RESTRICT"
+                        on_update = "RESTRICT"
+                        for opt in (ref_obj.args.get("options") or []):
+                            opt_str = str(opt).upper()
+                            if "ON DELETE" in opt_str:
+                                on_delete = opt_str.replace("ON DELETE", "").strip()
+                            elif "ON UPDATE" in opt_str:
+                                on_update = opt_str.replace("ON UPDATE", "").strip()
+
+                        for i, scol in enumerate(src_cols):
+                            rcol = ref_cols[i] if i < len(ref_cols) else ""
+                            pending_fks.append({
+                                "src_table": tname,
+                                "src_col": scol,
+                                "ref_table": ref_tname,
+                                "ref_col": rcol,
+                                "on_delete": on_delete,
+                                "on_update": on_update,
+                            })
+
+    # Resolve pending foreign keys to relationships
     for fk in pending_fks:
         stid = tname_to_id.get(fk["src_table"].lower())
         ttid = tname_to_id.get(fk["ref_table"].lower())
         scid = ckey_to_id.get((fk["src_table"].lower(), fk["src_col"].lower()))
-        tcid = ckey_to_id.get((fk["ref_table"].lower(), fk["ref_col"].lower()))
+
+        ref_cname = fk["ref_col"].lower()
+        if not ref_cname:
+            target_pks = table_pks.get(fk["ref_table"].lower(), ["id"])
+            ref_cname = target_pks[0] if target_pks else "id"
+
+        tcid = ckey_to_id.get((fk["ref_table"].lower(), ref_cname))
+
         if stid and ttid and scid and tcid:
             rels.append({
                 "id": f"r_{uuid4().hex[:8]}",
-                "sourceTableId": stid, "sourceColumnId": scid,
-                "targetTableId": ttid, "targetColumnId": tcid,
+                "sourceTableId": stid,
+                "sourceColumnId": scid,
+                "targetTableId": ttid,
+                "targetColumnId": tcid,
                 "type": "one-to-many",
-                "onDelete": fk["on_delete"], "onUpdate": fk["on_update"], "label": "",
+                "onDelete": fk["on_delete"],
+                "onUpdate": fk["on_update"],
+                "label": "",
             })
 
-    return {"tables": tables, "relationships": rels}
+    return {"tables": tables, "relationships": rels, "dialect": detected_dialect}
 
 # ─── Routes ─────────────────────────────────────────────────────────────────
 
